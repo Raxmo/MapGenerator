@@ -107,7 +107,7 @@ namespace MapGenerator
 												 Color.FromArgb(3 << 5, Color.SkyBlue),
 												 Color.FromArgb(4 << 5, Color.ForestGreen),
 												 Color.FromArgb(5 << 5, Color.AntiqueWhite),
-												 Color.FromArgb(6 << 5, Color.Beige),
+												 Color.FromArgb(6 << 5, Color.Yellow),
 												 Color.FromArgb(7 << 5, Color.Firebrick)};
 
 		public static void Generate(int depth, int points)
@@ -149,13 +149,127 @@ namespace MapGenerator
 
 				int percent = 0;
 
-				Console.WriteLine("Initiating Voronoi construction...");
-
 				/* Poisson disk sampling
-				 * 
+				 * variables:
+				 * r: the minimal distance allowed between samples
+				 * k: the number of tries each step, typically 30
 				 */
 
-				// check to see what seed in closest, and set the chosen pixel's color to the same color
+				var pr = 128;
+				var pk = 30;
+
+				/* step 0:
+				 * + initialize n dimentional array (grid) to store samples and speeing up spacial calculations [in this case n = 2]
+				 * + set cell size to r * sqrt(n) / n [in this case n = 2]
+				 * + populate array with (-1,-1)
+				 */
+
+				var pcellsize = pr * Math.Sqrt(2) / 2;
+				var pcellinverse = Math.Sqrt(2) / pr;
+				int psize = (int)Math.Ceiling(((depth << 1) + 1) * pcellinverse);
+
+				var pgrid = new Point[psize, psize];
+				for (int i = 0; i < psize; i++)
+				{
+					for (int j = 0; j < psize; j++)
+					{
+						pgrid[i, j] = new Point(-1, -1);
+					}
+				}
+
+				/* Step 1:
+				 * + pick a random point in the domain
+				 * + add point to background grid (the array)
+				 * + initialize active array with this starting point's index
+				 */
+
+				var sample0 = new Point(rng.Next(output.Width), rng.Next(output.Height));
+
+				pgrid[(int)Math.Floor(sample0.X * pcellinverse), (int)Math.Floor(sample0.Y * pcellinverse)] = sample0; // <- this will add the chosen sample into the grid at the proper location.
+				var pactive = new List<Point> { sample0 };
+
+				/* Step 2:
+				 * + While active is not empty, pick a random index i from active
+				 * + generate up to k points between r and 2r away from selected active sample
+				 * - for each generated sample, check to see if it is within the range of r of any other sample, using the grid to narrow the search to only neighbors
+				 * - if generated point is valid, add it to the active list
+				 * - if no valid samples were generated, remove i from active list
+				 */
+				 
+				var seeds = new List<Point>();
+
+				Console.WriteLine("Starting Poisson seeding...");
+
+				while (pactive.Count > 0)
+				{
+					var workingIndex = rng.Next(pactive.Count);
+
+					var working = pactive[workingIndex];
+
+					var foundvalid = false;
+
+					for (int i = 0; i < pk; i++)
+					{
+						var sa = rng.NextDouble() * Math.PI * 2;
+						var sr = (rng.NextDouble() * pr) + pr;
+
+						var sx = sr * Math.Cos(sa) + working.X;
+						var sy = sr * Math.Sin(sa) + working.Y;
+
+						sx = Math.Max(0, sx);
+						sy = Math.Max(0, sy);
+
+						sx = Math.Min(sx, (depth << 1));
+						sy = Math.Min(sy, (depth << 1));
+
+						var sample = new Point((int)sx, (int)sy);
+						var sgrid = new Point((int)Math.Floor(sample.X * pcellinverse), (int)Math.Floor(sample.Y * pcellinverse));
+						
+						var isValid = true;
+
+						for (int j = -1; j <= 1; j++)
+						{
+							for (int k = -1; k <= 1; k++)
+							{
+								if ((j + sgrid.X) >= 0 && (j + sgrid.X) < psize && (k + sgrid.Y) >= 0 && (k + sgrid.Y) < psize)
+								{
+									var neighbor = pgrid[sgrid.X + j, sgrid.Y + k];
+
+									if (neighbor != new Point(-1, -1))
+									{
+										var dist = ((neighbor.X - sample.X) * (neighbor.X - sample.X)) + ((neighbor.Y - sample.Y) * (neighbor.Y - sample.Y));
+										if (dist < (pr * pr))
+										{
+											isValid = false;
+										}
+									}
+								}
+							}
+						}
+
+						if(isValid)
+						{
+							pgrid[sgrid.X, sgrid.Y] = sample;
+							pactive.Add(sample);
+							seeds.Add(sample);
+							foundvalid = true;
+						}
+					}
+
+					if (!foundvalid)
+					{
+						pactive.RemoveAt(workingIndex);
+					}
+				}
+
+				for (int i = 0; i < seeds.Count; i++)
+				{
+					var Biome = biomeColor[rng.Next(8)];
+
+					output.SetPixel(seeds[i].X, seeds[i].Y, Biome);
+				}
+
+				//check to see what seed in closest, and set the chosen pixel's color to the same color
 				for (int x = 0; x < output.Width; x++)
 				{
 					for (int y = 0; y < output.Height; y++)
@@ -163,7 +277,7 @@ namespace MapGenerator
 						var curPoint = new Point();
 						int curDistance = int.MaxValue;
 
-						for (int i = 0; i < seeds.Length; i++)
+						for (int i = 0; i < seeds.Count; i++)
 						{
 							if (((seeds[i].X - x) * (seeds[i].X - x) + (seeds[i].Y - y) * (seeds[i].Y - y)) <= curDistance)
 							{
