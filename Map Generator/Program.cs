@@ -93,7 +93,7 @@ namespace MapGenerator
 
 					for (int j = -1; j <= 1; j++)
 					{
-						for (int h = -1; h <= 1; k++)
+						for (int h = -1; h <= 1; h++)
 						{
 							if ((j + sgrid.X) >= 0 && (j + sgrid.X) < size && (h + sgrid.Y) >= 0 && (h + sgrid.Y) < size)
 							{
@@ -133,29 +133,27 @@ namespace MapGenerator
 					{
 						if (isFirstItteration)
 						{
-							var dist = ((grid[i, j].X - sample0.X) * (grid[i, j].X - sample0.X)) + ((grid[i, j].Y - sample0.Y) * (grid[i, j].Y - sample0.Y));
-
-							var isOut = (dist > (depth * depth)) || grid[i, j] == sample0;
+							var isOut = grid[i, j] == sample0;
 
 							if (isOut)
 							{
 								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.badlands]);
 							}
-							else if (-grid[i, j].Y >= Math.Abs(grid[i, j].X))
+							else if (-(grid[i, j].Y - sample0.Y) >= Math.Abs(grid[i, j].X - sample0.X))
 							{
-								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.forest]);
+								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.desert]);
 							}
-							else if (grid[i, j].X > Math.Abs(grid[i, j].Y))
+							else if (grid[i, j].X - sample0.X > Math.Abs(grid[i, j].Y - sample0.Y))
 							{
 								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.plains]);
 							}
-							else if (-grid[i, j].X > Math.Abs(grid[i, j].Y))
+							else if (-(grid[i, j].X - sample0.X) > Math.Abs(grid[i, j].Y - sample0.Y))
 							{
 								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.swamp]);
 							}
 							else
 							{
-								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.desert]);
+								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.forest]);
 							}
 						}
 						else
@@ -172,7 +170,10 @@ namespace MapGenerator
 							{
 								source.SetPixel(grid[i, j].X, grid[i, j].Y, biomeColor[(int)biome.river]);
 							}
-							else { }
+							else
+							{
+								source.SetPixel(grid[i, j].X, grid[i, j].Y, source.GetPixel(grid[i, j].X, grid[i, j].Y));
+							}
 						}
 					}
 				}
@@ -221,17 +222,37 @@ namespace MapGenerator
 							}
 						}
 					}
+					if(isFirstItteration)
+					{
+						var o = new Point(source.Width >> 1, source.Height >> 1);
+						var ndist = Math.Abs(((x - o.X) * (x - o.X)) + ((y - o.Y) * (y - o.Y)) - (depth * depth));
+						var dist = ((x - o.X) * (x - o.X)) + ((y - o.Y) * (y - o.Y));
+						if(ndist < curDistance)
+						{
+							curPoint = new Point(source.Width >> 1, source.Height >> 1);
+						}
+					}
 					source.SetPixel(x, y, source.GetPixel(curPoint.X, curPoint.Y));
 				}
 			}
 		}
 
-		public static void Colorize(Bitmap source)
+		public static void Colorize(Bitmap source, bool isFirstItteration, int depth)
 		{
 			for (int x = 0; x < source.Width; x++)
 			{
 				for (int y = 0; y < source.Height; y++)
 				{
+					if (isFirstItteration)
+					{
+						var o = new Point(source.Width >> 1, source.Height >> 1);
+						var ndist = Math.Abs(((x - o.X) * (x - o.X)) + ((y - o.Y) * (y - o.Y)) - (depth * depth));
+						var dist = ((x - o.X) * (x - o.X)) + ((y - o.Y) * (y - o.Y));
+						if (dist > (depth * depth))
+						{
+							source.SetPixel(x, y, biomeColor[(int)biome.badlands]);
+						}
+					}
 					switch (source.GetPixel(x, y).A >> 5)
 					{
 						case 0:
@@ -286,9 +307,17 @@ namespace MapGenerator
 			{
 				var seeds = Poisson(depth, output, true);
 
-				//Voronoi(seeds, output, true, depth);
+				Voronoi(seeds, output, true, depth);
 
-				Colorize(output);
+				for(int i = 1; i <= 1; i++)
+				{
+					var ndepth = depth >> i;
+					var seed = Poisson(ndepth, output, false);
+
+					Voronoi(seed, output, false, ndepth);
+				}
+
+				Colorize(output, true, depth);				
 			}
 
 
