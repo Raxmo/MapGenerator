@@ -45,6 +45,65 @@ namespace MapGenerator
 			 * - use voronoi recursion to define borders between biomes?
 			 * - colorize by adding a little static to every pixel.
 			 */
+
+			var progress = 0;
+			var total = biomeData.Width * biomeData.Height;
+
+			Console.WriteLine("Generating chunks...");
+
+			for (int x = 0; x < biomeData.Width; x++)
+			{
+				for (int y = 0; y < biomeData.Height; y++)
+				{
+					using (Bitmap output = new Bitmap(256, 256))
+					{
+						var seedloc = new Point(biomeData.GetPixel(x, y).R, biomeData.GetPixel(x, y).G);
+						var seedBiome = biomeData.GetPixel(x, y).A;
+
+						var neighbors = new List<Point> { };
+						var neighborBiomes = new List<byte> { };
+
+						for(int jx = -1; jx <= 1; jx++)
+						{
+							for(int jy = -1; jy <= 1; jy++)
+							{
+								if(jx + x >= 0 && jx + x < biomeData.Width && jy + y >= 0 && jy + y < biomeData.Height)
+								{
+									neighbors.Add(new Point(biomeData.GetPixel(jx + x, jy + y).R + (jx * output.Width), biomeData.GetPixel(jx + x, jy + y).G + (jy * output.Height)));
+									neighborBiomes.Add(biomeData.GetPixel(jx + x, jy + y).A);
+								}
+							}
+						}
+
+						for (int ix = 0; ix < output.Width; ix++)
+						{
+							for (int iy = 0; iy < output.Height; iy++)
+							{
+								var curDist = int.MaxValue;
+								var foundIndex = 0;
+
+								for(int k = 0; k < neighbors.Count; k++)
+								{
+									var neighbor = neighbors[k];
+									var wdist = ((neighbor.X - ix) * (neighbor.X - ix)) + ((neighbor.Y - iy) * (neighbor.Y - iy));
+
+									if (wdist < curDist)
+									{
+										curDist = wdist;
+										foundIndex = k;
+									}
+								}
+
+								output.SetPixel(ix, iy, Color.FromArgb(neighborBiomes[foundIndex], Color.White));
+							}
+						}
+						output.Save("chunk," + x + "," + y + ".bmp");
+					}
+				}
+				progress = (100 * x) / biomeData.Width;
+				Console.Write("\r progress: {0}%      ", progress);
+			}
+			Console.WriteLine("\r Complete            ");
 		}
 
 		public static void SeedChunks(Bitmap source)
@@ -56,7 +115,7 @@ namespace MapGenerator
 			{
 				for (int y = 0; y < source.Height; y++)
 				{
-					source.SetPixel(x, y, Color.FromArgb(source.GetPixel(x, y).A, (128 + rng.Next(64) - rng.Next(64)), (128 + rng.Next(64) - rng.Next(64)), 0));
+					source.SetPixel(x, y, Color.FromArgb(source.GetPixel(x, y).A, (64 + rng.Next(128)), (64 + rng.Next(128)), 0));
 				}
 
 				progress = (100 * x) / source.Width;
@@ -404,9 +463,6 @@ namespace MapGenerator
 
 				SeedChunks(output);
 				output.Save("world.bmp");
-				
-				//Colorize(output, false, depth);
-
 			}
 
 
@@ -418,7 +474,11 @@ namespace MapGenerator
 			sw.Start();
 			Console.WriteLine("Starting generation, please wait, will take some time.");
 
-			GenerateBiomes(2);
+			GenerateBiomes(4);
+			using (var source = new Bitmap("world.bmp"))
+			{
+				GenerateChunks(source);
+			}
 
 			sw.Stop();
 			Console.WriteLine("Finished generation in: " + sw.Elapsed);
